@@ -1,39 +1,88 @@
 const GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
 
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${GATEWAY}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export const api = {
-  tasks: {
-    list: () => fetch(`${GATEWAY}/api/tasks`).then((r) => r.json()),
-    create: (data: object) =>
-      fetch(`${GATEWAY}/api/tasks`, {
+  employees: {
+    list: (params = "") => request<any>(`/api/employees${params}`),
+    stats: () => request<any>("/api/employees/stats"),
+    get: (id: string) => request<any>(`/api/employees/${id}`),
+    create: (data: any) =>
+      request<any>("/api/employees", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).then((r) => r.json()),
+      }),
+    update: (id: string, data: any) =>
+      request<any>(`/api/employees/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) =>
-      fetch(`${GATEWAY}/api/tasks/${id}`, { method: "DELETE" }).then((r) =>
-        r.json(),
-      ),
+      request<any>(`/api/employees/${id}`, { method: "DELETE" }),
+    seed: () => request<any>("/api/employees/seed", { method: "POST" }),
   },
-  users: {
-    list: () => fetch(`${GATEWAY}/api/users`).then((r) => r.json()),
-    create: (data: object) =>
-      fetch(`${GATEWAY}/api/users`, {
+  leaves: {
+    list: (params = "") => request<any>(`/api/leaves${params}`),
+    stats: () => request<any>("/api/leaves/stats"),
+    create: (data: any) =>
+      request<any>("/api/leaves", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).then((r) => r.json()),
+      }),
+    updateStatus: (id: string, data: any) =>
+      request<any>(`/api/leaves/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<any>(`/api/leaves/${id}`, { method: "DELETE" }),
+    seed: () => request<any>("/api/leaves/seed", { method: "POST" }),
   },
   notify: {
-    list: () => fetch(`${GATEWAY}/api/notify`).then((r) => r.json()),
-    create: (data: object) =>
-      fetch(`${GATEWAY}/api/notify`, {
+    list: (params = "") => request<any>(`/api/notify${params}`),
+    stats: () => request<any>("/api/notify/stats"),
+    create: (data: any) =>
+      request<any>("/api/notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).then((r) => r.json()),
+      }),
+    markRead: (id: string) =>
+      request<any>(`/api/notify/${id}/read`, { method: "PATCH" }),
+    markAllRead: () =>
+      request<any>("/api/notify/read-all", {
+        method: "PATCH",
+        body: JSON.stringify({}),
+      }),
+    delete: (id: string) =>
+      request<any>(`/api/notify/${id}`, { method: "DELETE" }),
+    seed: () => request<any>("/api/notify/seed", { method: "POST" }),
   },
-  compute: {
-    run: (n = 38) =>
-      fetch(`${GATEWAY}/api/compute?n=${n}`).then((r) => r.json()),
+  payroll: {
+    calculate: (data: any) =>
+      request<any>("/api/payroll/calculate", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    batch: (data: any) =>
+      request<any>("/api/payroll/batch", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    stats: (data: any) =>
+      request<any>("/api/payroll/stats", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    benchmark: (n = 38) => request<any>(`/api/compute?n=${n}`),
   },
 };

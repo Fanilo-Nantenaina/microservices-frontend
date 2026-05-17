@@ -5,7 +5,6 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 
-# URL du gateway injectée au build
 ARG NEXT_PUBLIC_GATEWAY_URL
 ENV NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL
 

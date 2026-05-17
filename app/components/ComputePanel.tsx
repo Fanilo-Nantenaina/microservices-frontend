@@ -10,7 +10,7 @@ export default function ComputePanel() {
 
     const runOnce = async () => {
         const res = await api.compute.run(38);
-        setResults(prev => [res, ...prev].slice(0, 10)); // garder les 10 derniers
+        setResults(prev => [res, ...prev].slice(0, 10));
         return res;
     };
 
@@ -18,7 +18,6 @@ export default function ComputePanel() {
         setRunning(true);
         setCount(0);
         setResults([]);
-        // 20 requêtes séquentielles pour stresser le CPU
         for (let i = 0; i < 20; i++) {
             await runOnce();
             setCount(i + 1);
@@ -45,7 +44,7 @@ export default function ComputePanel() {
                 </button>
             </div>
 
-            {/* Tableau des résultats — montre quel POD répond */}
+            {}
             {results.length > 0 && (
                 <div className="overflow-x-auto">
                     <table className="text-xs w-full">
