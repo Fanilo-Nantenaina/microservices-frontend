@@ -1,39 +1,57 @@
 "use client";
 import { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
+import Shell from "../components/Shell";
 import PageHeader from "../components/PageHeader";
 import { api } from "../../lib/api";
 import type { Employee, PayslipResult, BatchPayrollResult, BenchmarkResult, PaginatedResponse } from "../../types";
+import { Play, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+    Table, TableBody, TableCell,
+    TableHead, TableHeader, TableRow
+} from "@/components/ui/table";
+import {
+    Select, SelectContent, SelectItem,
+    SelectTrigger, SelectValue
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export default function PayrollPage() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [payslip, setPayslip] = useState<PayslipResult | null>(null);
-    const [batchResult, setBatch] = useState<BatchPayrollResult | null>(null);
+    const [batch, setBatch] = useState<BatchPayrollResult | null>(null);
     const [benchResults, setBench] = useState<BenchmarkResult[]>([]);
     const [running, setRunning] = useState(false);
-    const [benchRunning, setBenchRunning] = useState(false);
+    const [benchRun, setBenchRun] = useState(false);
     const [benchCount, setBenchCount] = useState(0);
     const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
 
     useEffect(() => {
-        const fetchEmployees = async () => {
+        const load = async () => {
             const r = await api.employees.list("?limit=100&status=active") as PaginatedResponse<Employee>;
             setEmployees(r.data ?? []);
         };
-        void fetchEmployees();
+        void load();
     }, []);
 
     const calcPayslip = async () => {
         if (!selectedEmp) return;
         setRunning(true); setPayslip(null);
         try {
+            const seniority = Math.floor(
+                (Date.now() - new Date(selectedEmp.hireDate).getTime()) / (365.25 * 24 * 3600 * 1000)
+            );
             const res = await api.payroll.calculate({
                 name: `${selectedEmp.firstName} ${selectedEmp.lastName}`,
                 salary: selectedEmp.salary,
                 department: selectedEmp.department,
                 contractType: selectedEmp.contractType,
-                seniority: Math.floor((Date.now() - new Date(selectedEmp.hireDate).getTime()) / (365.25 * 24 * 3600 * 1000)),
-            });
+                seniority,
+            }) as PayslipResult;
             setPayslip(res);
         } finally { setRunning(false); }
     };
@@ -48,158 +66,179 @@ export default function PayrollPage() {
                     department: e.department,
                     contractType: e.contractType,
                 }))
-            });
+            }) as BatchPayrollResult;
             setBatch(res);
         } finally { setRunning(false); }
     };
 
     const runBenchmark = async () => {
-        setBenchRunning(true); setBenchCount(0); setBench([]);
+        setBenchRun(true); setBenchCount(0); setBench([]);
         for (let i = 0; i < 20; i++) {
-            const r = await api.payroll.benchmark(40);
+            const r = await api.payroll.benchmark(40) as BenchmarkResult;
             setBench(p => [r, ...p].slice(0, 15));
             setBenchCount(i + 1);
         }
-        setBenchRunning(false);
+        setBenchRun(false);
     };
 
-    const row = (label: string, value: string | number, bold = false, color = "#374151") => (
-        <div style={{
-            display: "flex", justifyContent: "space-between", padding: "10px 0",
-            borderBottom: "1px solid #F1F5F9"
-        }}>
-            <span style={{ fontSize: 14, color: "#64748B" }}>{label}</span>
-            <span style={{
-                fontSize: 14, fontWeight: bold ? 700 : 500, color,
-                fontFamily: "var(--font-mono)"
-            }}>{value}</span>
+    const row = (label: string, value: string | number, highlight = false) => (
+        <div className="flex justify-between py-2 border-b last:border-0">
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className={cn("text-sm font-mono", highlight && "font-semibold text-foreground")}>
+                {value}
+            </span>
         </div>
     );
 
     return (
-        <div style={{ display: "flex" }}>
-            <Sidebar />
-            <main className="main-content">
-                <PageHeader title="💰 Paie & Performance" subtitle="Simulation de paie + Benchmark HPA" />
+        <Shell>
+            <PageHeader title="Paie & Performance" subtitle="Simulation de paie et benchmark HPA" />
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
-                    {/* Simulateur de fiche de paie */}
-                    <div className="card" style={{ padding: 24 }}>
-                        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>🧾 Simulateur de fiche de paie</h2>
-                        <select className="input" style={{ marginBottom: 14 }}
-                            onChange={e => {
-                                const found = employees.find(emp => emp._id === e.target.value);
+                {/* Simulateur */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-semibold">Simulateur de fiche de paie</CardTitle>
+                        <CardDescription className="text-xs">
+                            Calcul individuel avec cotisations et primes
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Employé</Label>
+                            <Select onValueChange={id => {
+                                const found = employees.find(e => e._id === id);
                                 if (found) setSelectedEmp(found);
                             }}>
-                            <option value="">Sélectionner un employé</option>
-                            {employees.map((e: Employee) => (
-                                <option key={e._id} value={e._id}>
-                                    {e.firstName} {e.lastName} — {e.department}
-                                </option>
-                            ))}
-                        </select>
-                        <button className="btn btn-primary" style={{ width: "100%" }}
-                            onClick={calcPayslip} disabled={!selectedEmp || running}>
-                            {running ? "⏳ Calcul en cours..." : "🧮 Calculer la fiche"}
-                        </button>
+                                <SelectTrigger className="h-8 text-sm">
+                                    <SelectValue placeholder="Sélectionner un employé" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {employees.map(e => (
+                                        <SelectItem key={e._id} value={e._id}>
+                                            {e.firstName} {e.lastName} — {e.department}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button className="w-full" size="sm" onClick={calcPayslip}
+                            disabled={!selectedEmp || running}>
+                            <Play size={13} className="mr-1.5" />
+                            {running ? "Calcul..." : "Calculer"}
+                        </Button>
 
                         {payslip && (
-                            <div style={{ marginTop: 20 }}>
-                                <div style={{ background: "#F8FAFC", borderRadius: 10, padding: 16 }}>
-                                    {row("Salaire brut mensuel", `${payslip.gross.toLocaleString("fr")} €`)}
-                                    {row("Cotisations salariales (-)", `${payslip.employeeContributions.toLocaleString("fr")} €`, false, "#EF4444")}
-                                    {row("Cotisations patronales", `${payslip.employerContributions.toLocaleString("fr")} €`, false, "#94A3B8")}
-                                    {row("Net avant impôt", `${payslip.netBeforeTax.toLocaleString("fr")} €`)}
-                                    {row("Prime ancienneté (+)", `${payslip.seniorityBonus.toLocaleString("fr")} €`, false, "#10B981")}
-                                    {row("Prime performance (+)", `${payslip.perfBonus.toLocaleString("fr")} €`, false, "#10B981")}
-                                    {row("Tickets restaurant (+)", `${payslip.mealVouchers.toLocaleString("fr")} €`, false, "#10B981")}
-                                    <div style={{ height: 1, background: "#E2E8F0", margin: "8px 0" }} />
-                                    {row("NET À PAYER", `${payslip.netTotal.toLocaleString("fr")} €`, true, "#0F172A")}
-                                    <div style={{
-                                        marginTop: 8, fontSize: 12, color: "#94A3B8",
-                                        fontFamily: "var(--font-mono)"
-                                    }}>
-                                        ⏱ Calculé en {payslip.durationMs}ms · Pod: {payslip.pod?.slice(0, 12)}
-                                    </div>
-                                </div>
+                            <div className="pt-2">
+                                <Separator className="mb-3" />
+                                {row("Salaire brut mensuel", `${payslip.gross.toLocaleString("fr")} €`)}
+                                {row("Cotisations salariales", `− ${payslip.employeeContributions.toLocaleString("fr")} €`)}
+                                {row("Net avant impôt", `${payslip.netBeforeTax.toLocaleString("fr")} €`)}
+                                {row("Prime ancienneté", `+ ${payslip.seniorityBonus.toLocaleString("fr")} €`)}
+                                {row("Prime performance", `+ ${payslip.perfBonus.toLocaleString("fr")} €`)}
+                                {row("Tickets restaurant", `+ ${payslip.mealVouchers.toLocaleString("fr")} €`)}
+                                <Separator className="my-2" />
+                                {row("NET À PAYER", `${payslip.netTotal.toLocaleString("fr")} €`, true)}
+                                <p className="text-[11px] text-muted-foreground font-mono mt-2">
+                                    {payslip.durationMs}ms · {payslip.pod?.slice(0, 16)}
+                                </p>
                             </div>
                         )}
-                    </div>
+                    </CardContent>
+                </Card>
 
-                    {/* Masse salariale */}
-                    <div className="card" style={{ padding: 24 }}>
-                        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>📊 Masse salariale globale</h2>
-                        <p style={{ fontSize: 13, color: "#64748B", marginBottom: 16 }}>
-                            Calcule les fiches de paie de tous les employés actifs en un batch — intensif CPU.
+                {/* Masse salariale */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-semibold">Masse salariale globale</CardTitle>
+                        <CardDescription className="text-xs">
+                            Traitement batch de tous les employés actifs
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-xs text-muted-foreground">
+                            Lance le calcul simultané pour les {employees.length} employés actifs.
+                            Intensif CPU — déclenche le HPA.
                         </p>
-                        <button className="btn btn-primary" style={{ width: "100%", marginBottom: 16 }}
+                        <Button className="w-full" size="sm" variant="outline"
                             onClick={calcBatch} disabled={running || employees.length === 0}>
-                            {running ? "⏳ Traitement batch..." : `🏭 Lancer batch (${employees.length} employés)`}
-                        </button>
+                            <Play size={13} className="mr-1.5" />
+                            {running ? "Traitement..." : `Batch (${employees.length} employés)`}
+                        </Button>
 
-                        {batchResult && (
-                            <div style={{ background: "#F8FAFC", borderRadius: 10, padding: 16 }}>
-                                {row("Employés traités", batchResult.count)}
-                                {row("Masse salariale mensuelle", `${batchResult.totalPayroll.toLocaleString("fr")} €`, true, "#3B82F6")}
-                                {row("Masse salariale annuelle", `${(batchResult.totalPayroll * 12).toLocaleString("fr")} €`, true, "#0F172A")}
-                                <div style={{ marginTop: 12, fontSize: 12, color: "#94A3B8", fontFamily: "var(--font-mono)" }}>
-                                    ⏱ {batchResult.durationMs}ms · Pod: {batchResult.pod?.slice(0, 12)}
-                                </div>
+                        {batch && (
+                            <div className="pt-2">
+                                <Separator className="mb-3" />
+                                {row("Employés traités", batch.count)}
+                                {row("Masse mensuelle", `${batch.totalPayroll.toLocaleString("fr")} €`, true)}
+                                {row("Masse annuelle", `${(batch.totalPayroll * 12).toLocaleString("fr")} €`, true)}
+                                <p className="text-[11px] text-muted-foreground font-mono mt-2">
+                                    {batch.durationMs}ms · {batch.pod?.slice(0, 16)}
+                                </p>
                             </div>
                         )}
-                    </div>
-                </div>
+                    </CardContent>
+                </Card>
+            </div>
 
-                {/* Benchmark HPA */}
-                <div className="card" style={{ padding: 24 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                        <div>
-                            <h2 style={{ fontSize: 16, fontWeight: 700 }}>⚡ Benchmark CPU — Déclencheur HPA</h2>
-                            <p style={{ fontSize: 13, color: "#64748B", marginTop: 4 }}>
-                                20 requêtes Fibonacci(40) séquentielles · Observer le scaling dans kubectl get hpa
-                            </p>
-                        </div>
-                        <button className="btn btn-primary" style={{ background: "#EF4444" }}
-                            onClick={runBenchmark} disabled={benchRunning}>
-                            {benchRunning ? `🔥 Benchmark... (${benchCount}/20)` : "🔥 Lancer Benchmark"}
-                        </button>
+            {/* Benchmark */}
+            <Card>
+                <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+                    <div>
+                        <CardTitle className="text-sm font-semibold">Benchmark CPU — HPA</CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                            20 requêtes Fibonacci(40) — observer kubectl get hpa
+                        </CardDescription>
                     </div>
-
+                    <Button size="sm" onClick={runBenchmark} disabled={benchRun}
+                        className="shrink-0">
+                        <Zap size={13} className="mr-1.5" />
+                        {benchRun ? `En cours (${benchCount}/20)` : "Lancer benchmark"}
+                    </Button>
+                </CardHeader>
+                <CardContent>
                     {benchResults.length > 0 && (
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>#</th><th>Pod</th><th>Fibonacci(40)</th>
-                                    <th>Éléments triés</th><th>Durée</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="text-xs">#</TableHead>
+                                    <TableHead className="text-xs">Pod</TableHead>
+                                    <TableHead className="text-xs">Fibonacci(40)</TableHead>
+                                    <TableHead className="text-xs">Éléments triés</TableHead>
+                                    <TableHead className="text-xs text-right">Durée</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
                                 {benchResults.map((r: BenchmarkResult, i: number) => (
-                                    <tr key={i}>
-                                        <td style={{ color: "#94A3B8", fontFamily: "var(--font-mono)" }}>{benchResults.length - i}</td>
-                                        <td style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#7C3AED" }}>
+                                    <TableRow key={i}>
+                                        <TableCell className="text-xs text-muted-foreground font-mono">
+                                            {benchResults.length - i}
+                                        </TableCell>
+                                        <TableCell className="text-xs font-mono text-muted-foreground">
                                             {r.pod?.slice(0, 18)}
-                                        </td>
-                                        <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                                        </TableCell>
+                                        <TableCell className="text-xs font-mono">
                                             {r.input} → {r.fibonacci?.toLocaleString("fr")}
-                                        </td>
-                                        <td style={{ color: "#64748B" }}>{r.sortedElements?.toLocaleString("fr")}</td>
-                                        <td>
-                                            <span style={{
-                                                fontWeight: 700, fontFamily: "var(--font-mono)",
-                                                color: r.durationMs > 1000 ? "#EF4444" : r.durationMs > 500 ? "#F59E0B" : "#10B981"
-                                            }}>
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {r.sortedElements?.toLocaleString("fr")}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Badge
+                                                variant={r.durationMs > 1500 ? "destructive" : r.durationMs > 800 ? "outline" : "secondary"}
+                                                className="text-xs font-mono"
+                                            >
                                                 {r.durationMs}ms
-                                            </span>
-                                        </td>
-                                    </tr>
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </tbody>
-                        </table>
+                            </TableBody>
+                        </Table>
                     )}
-                </div>
-            </main>
-        </div>
+                </CardContent>
+            </Card>
+        </Shell>
     );
 }

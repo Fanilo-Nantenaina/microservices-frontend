@@ -1,60 +1,62 @@
 "use client";
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
+import {
+    LayoutDashboard, Users, CalendarOff,
+    Bell, Wallet, Sun, Moon, Activity
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
-const nav = [
-    { href: "/", icon: "⊞", label: "Dashboard" },
-    { href: "/employees", icon: "👥", label: "Employés" },
-    { href: "/leaves", icon: "🏖️", label: "Congés" },
-    { href: "/notifications", icon: "🔔", label: "Notifications" },
-    { href: "/payroll", icon: "💰", label: "Paie & Perf" },
+const NAV = [
+    { href: "/", icon: LayoutDashboard, label: "Tableau de bord" },
+    { href: "/employees", icon: Users, label: "Employés" },
+    { href: "/leaves", icon: CalendarOff, label: "Congés" },
+    { href: "/notifications", icon: Bell, label: "Notifications" },
+    { href: "/payroll", icon: Wallet, label: "Paie & Perf." },
 ];
 
 export default function Sidebar() {
     const path = usePathname();
+    const { theme, setTheme } = useTheme();
 
     return (
-        <aside className="sidebar">
+        <aside className={cn(
+            "fixed left-0 top-0 h-screen flex flex-col border-r",
+            "bg-background z-40"
+        )} style={{ width: "var(--sidebar-w)" }}>
+
             {/* Logo */}
-            <div style={{ padding: "28px 24px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{
-                        width: 36, height: 36, borderRadius: 10,
-                        background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 16
-                    }}>☁</div>
-                    <div>
-                        <div style={{ color: "white", fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>RH Cloud</div>
-                        <div style={{ color: "#64748B", fontSize: 11 }}>MERN · K8s · GKE</div>
-                    </div>
+            <div className="flex items-center gap-3 px-5 py-5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-background">
+                    <Activity size={16} />
+                </div>
+                <div>
+                    <p className="text-sm font-semibold leading-none">RH Cloud</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">MERN · K8s</p>
                 </div>
             </div>
 
-            {/* Nav */}
-            <nav style={{ padding: "16px 12px", flex: 1 }}>
-                <div style={{
-                    fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em",
-                    textTransform: "uppercase", padding: "0 12px", marginBottom: 8
-                }}>
-                    Menu principal
-                </div>
-                {nav.map(({ href, icon, label }) => {
+            <Separator />
+
+            {/* Navigation */}
+            <nav className="flex-1 px-3 py-4 space-y-1">
+                <p className="px-2 mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Navigation
+                </p>
+                {NAV.map(({ href, icon: Icon, label }) => {
                     const active = path === href;
                     return (
-                        <Link key={href} href={href} style={{ textDecoration: "none" }}>
-                            <div style={{
-                                display: "flex", alignItems: "center", gap: 12,
-                                padding: "11px 14px", borderRadius: 10, marginBottom: 2,
-                                background: active ? "rgba(59,130,246,0.15)" : "transparent",
-                                color: active ? "#60A5FA" : "#94A3B8",
-                                fontWeight: active ? 600 : 400, fontSize: 14,
-                                transition: "all 0.15s",
-                                cursor: "pointer",
-                                borderLeft: active ? "3px solid #3B82F6" : "3px solid transparent",
-                            }}>
-                                <span style={{ fontSize: 16 }}>{icon}</span>
+                        <Link key={href} href={href}>
+                            <div className={cn(
+                                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors cursor-pointer",
+                                active
+                                    ? "bg-secondary font-medium text-foreground"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                            )}>
+                                <Icon size={16} />
                                 {label}
                             </div>
                         </Link>
@@ -62,14 +64,27 @@ export default function Sidebar() {
                 })}
             </nav>
 
+            <Separator />
+
             {/* Footer */}
-            <div style={{ padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.6 }}>
-                    <div style={{ color: "#64748B", fontWeight: 600, marginBottom: 4 }}>Infrastructure</div>
-                    <div>🟢 GKE · europe-west1</div>
-                    <div>🟢 MongoDB · StatefulSet</div>
-                    <div>🟢 HPA · 1-5 replicas</div>
+            <div className="px-4 py-4 space-y-3">
+                <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        Cluster
+                    </p>
+                    <p className="text-xs text-muted-foreground">GKE · europe-west1</p>
+                    <p className="text-xs text-muted-foreground">HPA · 1-5 replicas</p>
                 </div>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                >
+                    <Sun size={14} className="dark:hidden" />
+                    <Moon size={14} className="hidden dark:block" />
+                    <span className="text-xs">Thème</span>
+                </Button>
             </div>
         </aside>
     );

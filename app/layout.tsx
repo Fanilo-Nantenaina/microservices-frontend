@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
+import { JetBrains_Mono } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
+
 
 export const metadata: Metadata = {
-  title: "RH Dashboard — MERN K8s",
-  description: "Système de gestion des ressources humaines",
+  title: "RH Cloud — Gestion des ressources humaines",
+  description: "Plateforme RH sur GKE",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-      </head>
-      <body className="antialiased">{children}</body>
+    <html lang="fr" suppressHydrationWarning>
+      <body className={cn("font-mono", jetbrainsMono.variable)}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

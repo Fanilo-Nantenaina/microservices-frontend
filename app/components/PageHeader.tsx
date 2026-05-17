@@ -1,17 +1,24 @@
-export default function PageHeader({
-    title, subtitle, action
-}: {
+import { Separator } from "@/components/ui/separator";
+
+interface Props {
     title: string;
     subtitle?: string;
     action?: React.ReactNode;
-}) {
+}
+
+export default function PageHeader({ title, subtitle, action }: Props) {
     return (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
-            <div>
-                <h1 style={{ fontSize: 26, fontWeight: 800, color: "#0F172A", lineHeight: 1.2 }}>{title}</h1>
-                {subtitle && <p style={{ color: "#64748B", fontSize: 14, marginTop: 4 }}>{subtitle}</p>}
+        <div className="mb-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+                    {subtitle && (
+                        <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+                    )}
+                </div>
+                {action && <div>{action}</div>}
             </div>
-            {action && <div>{action}</div>}
+            <Separator className="mt-4" />
         </div>
     );
 }

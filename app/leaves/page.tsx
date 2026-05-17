@@ -1,22 +1,43 @@
 "use client";
-import { useEffect, useState } from "react";
-import Sidebar from "../components/Sidebar";
+import { useState, useEffect } from "react";
+import Shell from "../components/Shell";
 import PageHeader from "../components/PageHeader";
 import { api } from "../../lib/api";
 import type {
-    Leave, LeaveFormData, LeaveStats,
-    LeaveStatus, LeaveStatusStat, Employee, PaginatedResponse
+    Leave, LeaveFormData, LeaveStats, LeaveStatus, LeaveType,
+    LeaveStatusStat, PaginatedResponse, Employee
 } from "../../types";
+import { Plus, Check, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+    Table, TableBody, TableCell,
+    TableHead, TableHeader, TableRow
+} from "@/components/ui/table";
+import {
+    Dialog, DialogContent, DialogHeader,
+    DialogTitle, DialogFooter
+} from "@/components/ui/dialog";
+import {
+    Select, SelectContent, SelectItem,
+    SelectTrigger, SelectValue
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 
-const LEAVE_TYPES = ["Congé Payé", "RTT", "Maladie", "Maternité", "Paternité", "Sans Solde", "Exceptionnel"];
-const STATUS_CONFIG: Record<string, { color: string, bg: string, label: string }> = {
-    pending: { color: "#92400E", bg: "#FEF3C7", label: "En attente" },
-    approved: { color: "#065F46", bg: "#D1FAE5", label: "Approuvé" },
-    rejected: { color: "#991B1B", bg: "#FEE2E2", label: "Refusé" },
-    cancelled: { color: "#374151", bg: "#F3F4F6", label: "Annulé" },
+const LEAVE_TYPES: LeaveType[] = [
+    "Congé Payé", "RTT", "Maladie", "Maternité", "Paternité", "Sans Solde", "Exceptionnel"
+];
+const STATUS_CONFIG: Record<LeaveStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    pending: { label: "En attente", variant: "outline" },
+    approved: { label: "Approuvé", variant: "default" },
+    rejected: { label: "Refusé", variant: "destructive" },
+    cancelled: { label: "Annulé", variant: "secondary" },
 };
 
-const EMPTY_LEAVE: LeaveFormData = {
+const EMPTY: LeaveFormData = {
     employeeId: "", employeeName: "", department: "",
     type: "Congé Payé", startDate: "", endDate: "", days: "", reason: ""
 };
@@ -24,46 +45,26 @@ const EMPTY_LEAVE: LeaveFormData = {
 export default function LeavesPage() {
     const [leaves, setLeaves] = useState<Leave[]>([]);
     const [stats, setStats] = useState<LeaveStats | null>(null);
-    const [employees, setEmployees] = useState<Employee[]>([]);
-    const [form, setForm] = useState<LeaveFormData>({
-        employeeId: "", employeeName: "", department: "",
-        type: "Congé Payé", startDate: "", endDate: "", days: "", reason: ""
-    });
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatus] = useState("");
-    const [typeFilter, setType] = useState("");
-    const [showModal, setShowModal] = useState(false);
+    const [statusF, setStatusF] = useState("all");
+    const [typeF, setTypeF] = useState("all");
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [open, setOpen] = useState(false);
+    const [form, setForm] = useState<LeaveFormData>(EMPTY);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
 
-    const load = async () => {
-        setLoading(true);
-        try {
-            const params = new URLSearchParams();
-            if (statusFilter) params.set("status", statusFilter);
-            if (typeFilter) params.set("type", typeFilter);
-            params.set("limit", "50");
-            const [lv, st] = await Promise.all([
-                api.leaves.list(`?${params}`),
-                api.leaves.stats(),
-            ]);
-            setLeaves(lv.data || []);
-            setTotal(lv.total || 0);
-            setStats(st);
-        } finally { setLoading(false); }
-    };
-
     useEffect(() => {
-        const fetchLeaves = async () => {
+        const load = async () => {
             setLoading(true);
             try {
-                const params = new URLSearchParams();
-                if (statusFilter) params.set("status", statusFilter);
-                if (typeFilter) params.set("type", typeFilter);
-                params.set("limit", "50");
+                const p = new URLSearchParams();
+                if (statusF !== "all") p.set("status", statusF);
+                if (typeF !== "all") p.set("type", typeF);
+                p.set("limit", "50");
                 const [lv, st] = await Promise.all([
-                    api.leaves.list(`?${params}`) as Promise<PaginatedResponse<Leave>>,
+                    api.leaves.list(`?${p}`) as Promise<PaginatedResponse<Leave>>,
                     api.leaves.stats() as Promise<LeaveStats>,
                 ]);
                 setLeaves(lv.data ?? []);
@@ -71,23 +72,18 @@ export default function LeavesPage() {
                 setStats(st);
             } finally { setLoading(false); }
         };
-        void fetchLeaves();
-    }, [statusFilter, typeFilter]);
+        void load();
+    }, [statusF, typeF]);
 
-    // Séparé pour les employés (sans setLoading)
     useEffect(() => {
-        const fetchEmployees = async () => {
+        const load = async () => {
             const r = await api.employees.list("?limit=100&status=active") as PaginatedResponse<Employee>;
             setEmployees(r.data ?? []);
         };
-        void fetchEmployees();
+        void load();
     }, []);
 
-    useEffect(() => {
-        api.employees.list("?limit=100&status=active").then(r => setEmployees(r.data || []));
-    }, []);
-
-    const selectEmployee = (id: string) => {
+    const selectEmp = (id: string) => {
         const emp = employees.find(e => e.employeeId === id || e._id === id);
         if (!emp) return;
         setForm(p => ({
@@ -102,187 +98,208 @@ export default function LeavesPage() {
         setSaving(true); setError("");
         try {
             await api.leaves.create({ ...form, days: Number(form.days) });
-            setShowModal(false);
-            load();
+            setOpen(false);
+            setStatusF(s => s);
         } catch (e) { setError((e as Error).message); }
         finally { setSaving(false); }
     };
 
-    const updateStatus = async (id: string, status: string) => {
+    const updateStatus = async (id: string, status: LeaveStatus) => {
         await api.leaves.updateStatus(id, { status, approvedBy: "RH Dashboard" });
-        load();
+        setLeaves(prev => prev.map(l => l._id === id ? { ...l, status } : l));
+        if (stats) {
+            const pending = status === "pending"
+                ? stats.pending + 1
+                : Math.max(0, stats.pending - 1);
+            setStats({ ...stats, pending });
+        }
     };
 
-    const f = (k: string, v: string) => setForm((p: LeaveFormData) => ({ ...p, [k]: v }));
-
-    const fmtDate = (d: string) => new Date(d).toLocaleDateString("fr-FR");
+    const f = (k: keyof LeaveFormData, v: string) => setForm(p => ({ ...p, [k]: v }));
+    const fmt = (d: string) => new Date(d).toLocaleDateString("fr-FR");
 
     return (
-        <div style={{ display: "flex" }}>
-            <Sidebar />
-            <main className="main-content">
-                <PageHeader
-                    title="🏖️ Congés"
-                    subtitle={`${total} demandes`}
-                    action={<button className="btn btn-primary" onClick={() => { setForm(EMPTY_LEAVE); setError(""); setShowModal(true); }}>
-                        + Nouvelle demande
-                    </button>}
-                />
+        <Shell>
+            <PageHeader
+                title="Congés"
+                subtitle={`${total} demandes`}
+                action={
+                    <Button size="sm" onClick={() => { setForm(EMPTY); setError(""); setOpen(true); }}>
+                        <Plus size={14} className="mr-1" /> Nouvelle demande
+                    </Button>
+                }
+            />
 
-                {/* Stats rapides */}
-                {stats && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
-                        {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
-                            const found = stats.byStatus?.find((s: LeaveStatusStat) => s._id === key);
+            {/* Stats */}
+            {stats && (
+                <div className="grid grid-cols-4 gap-3 mb-5">
+                    {(Object.entries(STATUS_CONFIG) as [LeaveStatus, typeof STATUS_CONFIG[LeaveStatus]][]).map(([key, cfg]) => {
+                        const found = stats.byStatus?.find((s: LeaveStatusStat) => s._id === key);
+                        return (
+                            <Card key={key} className="cursor-pointer" onClick={() => setStatusF(statusF === key ? "all" : key)}>
+                                <CardContent className="p-4">
+                                    <p className="text-2xl font-bold">{found?.count ?? 0}</p>
+                                    <Badge variant={cfg.variant} className="mt-1 text-xs">{cfg.label}</Badge>
+                                    <p className="text-xs text-muted-foreground mt-1">{found?.totalDays ?? 0}j total</p>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Filtres */}
+            <Card className="mb-5">
+                <CardContent className="p-3 flex gap-3">
+                    <Select value={statusF} onValueChange={setStatusF}>
+                        <SelectTrigger className="w-[160px] h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Tous les statuts</SelectItem>
+                            {(Object.entries(STATUS_CONFIG) as [string, typeof STATUS_CONFIG[LeaveStatus]][]).map(([k, v]) => (
+                                <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={typeF} onValueChange={setTypeF}>
+                        <SelectTrigger className="w-[200px] h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Tous les types</SelectItem>
+                            {LEAVE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    {(statusF !== "all" || typeF !== "all") && (
+                        <Button variant="ghost" size="sm" className="h-8"
+                            onClick={() => { setStatusF("all"); setTypeF("all"); }}>
+                            Réinitialiser
+                        </Button>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Tableau */}
+            <Card>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Employé</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Période</TableHead>
+                            <TableHead>Durée</TableHead>
+                            <TableHead>Motif</TableHead>
+                            <TableHead>Statut</TableHead>
+                            <TableHead />
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
+                                    Chargement...
+                                </TableCell>
+                            </TableRow>
+                        ) : leaves.map(l => {
+                            const cfg = STATUS_CONFIG[l.status];
                             return (
-                                <div key={key} className="stat-card" style={{ padding: 18 }}>
-                                    <div style={{ fontSize: 22, fontWeight: 800, color: "#0F172A" }}>{found?.count || 0}</div>
-                                    <div className="badge" style={{ marginTop: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</div>
-                                    <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4 }}>{found?.totalDays || 0}j total</div>
-                                </div>
+                                <TableRow key={l._id}>
+                                    <TableCell>
+                                        <p className="font-medium text-sm">{l.employeeName}</p>
+                                        <p className="text-xs text-muted-foreground">{l.department}</p>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className="text-xs font-normal">{l.type}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs font-mono text-muted-foreground">
+                                        {fmt(l.startDate)} → {fmt(l.endDate)}
+                                    </TableCell>
+                                    <TableCell className="text-sm font-semibold">{l.days}j</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">
+                                        {l.reason || "—"}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        {l.status === "pending" && (
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-7 w-7"
+                                                    onClick={() => updateStatus(l._id, "approved")}>
+                                                    <Check size={12} />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                                                    onClick={() => updateStatus(l._id, "rejected")}>
+                                                    <X size={12} />
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
                             );
                         })}
-                    </div>
-                )}
+                    </TableBody>
+                </Table>
+            </Card>
 
-                {/* Filtres */}
-                <div className="card" style={{ padding: 14, marginBottom: 20, display: "flex", gap: 12 }}>
-                    <select className="input" style={{ maxWidth: 180 }} value={statusFilter} onChange={e => setStatus(e.target.value)}>
-                        <option value="">Tous les statuts</option>
-                        {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                    <select className="input" style={{ maxWidth: 200 }} value={typeFilter} onChange={e => setType(e.target.value)}>
-                        <option value="">Tous les types</option>
-                        {LEAVE_TYPES.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                </div>
-
-                {/* Table */}
-                <div className="card" style={{ overflow: "hidden" }}>
-                    {loading ? (
-                        <div style={{ padding: 60, textAlign: "center", color: "#94A3B8" }}>Chargement...</div>
-                    ) : (
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Employé</th><th>Type</th><th>Période</th>
-                                    <th>Durée</th><th>Motif</th><th>Statut</th><th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {leaves.map((l: Leave) => {
-                                    const cfg = STATUS_CONFIG[l.status];
-                                    return (
-                                        <tr key={l._id}>
-                                            <td>
-                                                <div style={{ fontWeight: 600 }}>{l.employeeName}</div>
-                                                <div style={{ fontSize: 12, color: "#94A3B8" }}>{l.department}</div>
-                                            </td>
-                                            <td>
-                                                <span className="badge" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{l.type}</span>
-                                            </td>
-                                            <td style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>
-                                                {fmtDate(l.startDate)} → {fmtDate(l.endDate)}
-                                            </td>
-                                            <td style={{ fontWeight: 700, color: "#0F172A" }}>{l.days}j</td>
-                                            <td style={{ maxWidth: 200, color: "#64748B", fontSize: 13 }}>
-                                                {l.reason || "—"}
-                                            </td>
-                                            <td>
-                                                <span className="badge" style={{ background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-                                            </td>
-                                            <td>
-                                                {l.status === "pending" && (
-                                                    <div style={{ display: "flex", gap: 6 }}>
-                                                        <button className="btn" style={{
-                                                            padding: "5px 10px", fontSize: 12,
-                                                            background: "#D1FAE5", color: "#065F46"
-                                                        }}
-                                                            onClick={() => updateStatus(l._id, "approved")}>✓ Approuver</button>
-                                                        <button className="btn" style={{
-                                                            padding: "5px 10px", fontSize: 12,
-                                                            background: "#FEE2E2", color: "#991B1B"
-                                                        }}
-                                                            onClick={() => updateStatus(l._id, "rejected")}>✕ Refuser</button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+            {/* Modal */}
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Nouvelle demande de congé</DialogTitle>
+                    </DialogHeader>
+                    {error && (
+                        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">{error}</p>
                     )}
-                </div>
-
-                {/* Modal */}
-                {showModal && (
-                    <div className="modal-overlay" onClick={() => setShowModal(false)}>
-                        <div className="modal" onClick={e => e.stopPropagation()}>
-                            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24 }}>🏖️ Nouvelle demande de congé</h2>
-                            {error && (
-                                <div style={{
-                                    background: "#FEE2E2", color: "#DC2626", padding: "10px 14px",
-                                    borderRadius: 8, marginBottom: 16, fontSize: 14
-                                }}>{error}</div>
-                            )}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", display: "block", marginBottom: 6 }}>
-                                        Employé *
-                                    </label>
-                                    <select className="input" value={form.employeeId}
-                                        onChange={e => selectEmployee(e.target.value)}>
-                                        <option value="">Sélectionner un employé</option>
-                                        {employees.map((e: Employee) => (
-                                            <option key={e._id} value={e.employeeId}>
-                                                {e.firstName} {e.lastName} ({e.employeeId})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", display: "block", marginBottom: 6 }}>
-                                        Type de congé *
-                                    </label>
-                                    <select className="input" value={form.type} onChange={e => f("type", e.target.value)}>
-                                        {LEAVE_TYPES.map(t => <option key={t}>{t}</option>)}
-                                    </select>
-                                </div>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                                    {(
-                                        [
-                                            ["Date début *", "startDate", "date"],
-                                            ["Date fin *", "endDate", "date"],
-                                            ["Nb jours *", "days", "number"],
-                                        ] as [string, keyof LeaveFormData, string][]
-                                    ).map(([label, key, type]) => (
-                                        <div key={key}>
-                                            <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", display: "block", marginBottom: 6 }}>
-                                                {label}
-                                            </label>
-                                            <input className="input" type={type} value={form[key]}
-                                                onChange={e => f(key, e.target.value)} />
-                                        </div>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Employé *</Label>
+                            <Select value={form.employeeId} onValueChange={selectEmp}>
+                                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                                <SelectContent>
+                                    {employees.map(e => (
+                                        <SelectItem key={e._id} value={e.employeeId}>
+                                            {e.firstName} {e.lastName} ({e.employeeId})
+                                        </SelectItem>
                                     ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Type *</Label>
+                            <Select value={form.type} onValueChange={v => f("type", v)}>
+                                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {LEAVE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            {([
+                                ["Début *", "startDate", "date"],
+                                ["Fin *", "endDate", "date"],
+                                ["Nb jours *", "days", "number"],
+                            ] as [string, keyof LeaveFormData, string][]).map(([label, key, type]) => (
+                                <div key={key} className="space-y-1.5">
+                                    <Label className="text-xs">{label}</Label>
+                                    <Input className="h-8 text-sm" type={type} value={form[key] as string}
+                                        onChange={e => f(key, e.target.value)} />
                                 </div>
-                                <div>
-                                    <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", display: "block", marginBottom: 6 }}>Motif</label>
-                                    <input className="input" value={form.reason}
-                                        placeholder="Raison de la demande..."
-                                        onChange={e => f("reason", e.target.value)} />
-                                </div>
-                            </div>
-                            <div style={{ display: "flex", gap: 12, marginTop: 24, justifyContent: "flex-end" }}>
-                                <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
-                                <button className="btn btn-primary" onClick={save} disabled={saving}>
-                                    {saving ? "⏳..." : "✅ Soumettre"}
-                                </button>
-                            </div>
+                            ))}
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Motif</Label>
+                            <Input className="h-8 text-sm" value={form.reason}
+                                placeholder="Raison de la demande..."
+                                onChange={e => f("reason", e.target.value)} />
                         </div>
                     </div>
-                )}
-            </main>
-        </div>
+                    <Separator />
+                    <DialogFooter>
+                        <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Annuler</Button>
+                        <Button size="sm" onClick={save} disabled={saving}>
+                            {saving ? "Envoi..." : "Soumettre"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </Shell>
     );
 }
